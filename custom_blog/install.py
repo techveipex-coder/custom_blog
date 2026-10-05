@@ -29,6 +29,7 @@ def create_event_fields():
 		return
 
 	create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)
+	frappe.db.updatedb("Blog Post")
 	reset_cache()
 
 
@@ -44,4 +45,5 @@ def reset_cache():
 	"""Drop the DocType cache and the cached website html of the blog pages."""
 	frappe.clear_cache(doctype="Blog Post")
 	frappe.clear_cache(doctype="Custom Field")
+	frappe.clear_cache(doctype="DocType")
 	clear_cache()

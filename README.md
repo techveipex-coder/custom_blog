@@ -133,11 +133,23 @@ bench --site <site> migrate
 bench --site <site> clear-cache
 ```
 
-`after_install` creates the fields and runs `updatedb` for them; the patch in
-`patches.txt` (`custom_blog.patches.v0_1.add_event_fields`) makes the same setup run
-idempotently on `bench migrate`. Uninstalling removes the Custom Fields again.
+`after_install` creates the fields and runs `updatedb` for them; the patches in
+`patches.txt` (`custom_blog.patches.v0_1.add_event_fields` and
+`custom_blog.patches.v0_2.add_event_ownership_and_signups`) make the same setup run
+idempotently on `bench migrate`. A patch is recorded in the site's Patch Log and never
+re-runs, so **newly added fields always ship with a new patch** — otherwise already
+migrated sites would never get them. Uninstalling removes the Custom Fields again.
 
 `custom_blog` declares `required_apps = ["blog"]`, so `blog` must be installed first.
+
+### Fields not showing on the Blog Post form
+
+1. Run `bench --site <site> migrate` (picks up new Custom Fields and creates the
+   `Blog Event Signup` table), then `bench --site <site> clear-cache` and reload.
+2. The event fields live in a **collapsible** "Event Details" section after *Featured* —
+   expand it.
+3. `event_date`, `event_location` and `is_owned_by_us` are only shown once **Is Event**
+   is ticked (`depends_on: eval:doc.is_event`). `is_event` is always visible.
 
 ## Frontend
 
