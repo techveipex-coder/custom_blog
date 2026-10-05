@@ -1,0 +1,14 @@
+*.pyc
+*.egg-info
+*.swp
+tags
+node_modules
+__pycache__
+.DS_Store
+*.pyc
+node_modules
+config.json
+package-lock.json
+logs
+.idea
+.vscode
