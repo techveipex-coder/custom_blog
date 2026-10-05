@@ -7,6 +7,11 @@ Fields:
 	is_event       Check, default 0 -- "Is Event"
 	event_date     Date, mandatory + visible only when is_event = 1
 	event_location Data, visible only when is_event = 1, label "Location"
+	is_owned_by_us Check, default 0 -- "Hosted by VEIPEX", visible only when is_event = 1
+
+`can_register` is deliberately NOT stored: it is derived from these fields plus the
+current date, so a stored value would go stale as soon as the event date passes.
+It is computed per response by `custom_blog.blog_api.can_register()`.
 """
 
 EVENT_FIELDS = [
@@ -39,11 +44,24 @@ EVENT_FIELDS = [
 		"insert_after": "event_date",
 		"depends_on": "eval:doc.is_event",
 	},
+	{
+		"fieldname": "is_owned_by_us",
+		"fieldtype": "Check",
+		"label": "Hosted by VEIPEX",
+		"default": "0",
+		"insert_after": "event_location",
+		"depends_on": "eval:doc.is_event",
+	},
 ]
 
-EVENT_FIELDNAMES = ("is_event", "event_date", "event_location")
+EVENT_FIELDNAMES = ("is_event", "event_date", "event_location", "is_owned_by_us")
 
 #: values used when a field is not installed on the DocType yet
-EVENT_FIELD_DEFAULTS = {"is_event": 0, "event_date": None, "event_location": None}
+EVENT_FIELD_DEFAULTS = {
+	"is_event": 0,
+	"event_date": None,
+	"event_location": None,
+	"is_owned_by_us": 0,
+}
 
 CUSTOM_FIELDS = {"Blog Post": EVENT_FIELDS}

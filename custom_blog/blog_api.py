@@ -8,18 +8,23 @@ renderer, which does `context.update(doc.as_dict())`.
 The website listing payload is built with an explicit column list, so the new
 Custom Fields are missing there. `apply_blog_api_patch()` wraps that function so
 every existing consumer (the `/blog` page, category pages and the templates)
-gets `is_event`, `event_date` and `event_location` in the response without
-touching the `blog` app.
+gets `is_event`, `event_date`, `event_location` and `is_owned_by_us` in the
+response without touching the `blog` app.
 
 The detail page already carries the fields because the renderer dumps the whole
 document; `serialize_blog_post()` exposes the same payload over a whitelisted
 REST endpoint for API consumers.
+
+On top of the stored fields both payloads carry the derived flag `can_register`
+(see `can_register()`), so the frontend never has to evaluate the event date
+itself.
 """
 
 import functools
 
 import frappe
-from frappe.utils import cint
+from frappe import _
+from frappe.utils import cint, getdate
 from frappe.website.utils import find_first_image, get_html_content_based_on_type
 
 from custom_blog.custom_fields import EVENT_FIELD_DEFAULTS, EVENT_FIELDNAMES
@@ -64,7 +69,7 @@ def _with_event_fields(original):
 
 
 def add_event_data(posts):
-	"""Add `is_event`, `event_date` and `event_location` to each post dict, in place."""
+	"""Add the event fields and `can_register` to each post dict, in place."""
 	if not posts or not event_fields_installed():
 		return posts
 
@@ -88,14 +93,7 @@ def add_event_data(posts):
 	values = {row[0]: dict(zip(EVENT_FIELDNAMES, row[1:])) for row in rows}
 
 	for post in posts:
-		data = values.get(post.get("name")) or EVENT_FIELD_DEFAULTS
-		post.update(
-			{
-				"is_event": cint(data["is_event"]),
-				"event_date": data["event_date"],
-				"event_location": data["event_location"] or None,
-			}
-		)
+		post.update(event_payload(values.get(post.get("name")) or EVENT_FIELD_DEFAULTS))
 
 	return posts
 
@@ -139,13 +137,63 @@ def serialize_blog_post(doc=None, name=None) -> dict:
 def event_data(doc) -> dict:
 	"""Event fields of a document, with safe defaults when not installed."""
 	if not event_fields_installed():
-		return dict(EVENT_FIELD_DEFAULTS)
+		return event_payload(EVENT_FIELD_DEFAULTS)
 
-	return {
-		"is_event": cint(doc.get("is_event")),
-		"event_date": doc.get("event_date"),
-		"event_location": doc.get("event_location") or None,
+	return event_payload(doc)
+
+
+def event_payload(data) -> dict:
+	"""Normalize raw event values into the API payload, adding `can_register`.
+
+	`data` may be a dict-like document or a row of event column values; missing
+	keys fall back to zero/None, so the payload shape never changes.
+	"""
+	payload = {
+		"is_event": cint(data.get("is_event")),
+		"event_date": data.get("event_date"),
+		"event_location": data.get("event_location") or None,
+		"is_owned_by_us": cint(data.get("is_owned_by_us")),
 	}
+	payload["can_register"] = can_register(payload)
+
+	return payload
+
+
+def can_register(event) -> int:
+	"""1 when registration should be offered: an upcoming event hosted by us.
+
+		can_register = is_event AND is_owned_by_us AND event_date >= today()
+
+	Computed on every response rather than stored, since it depends on today.
+	An event without a date can never be registered for.
+
+	Boolean shorthand of `registration_blocker(event) is None`, which is what the
+	registration endpoint uses to report *why* a signup is refused.
+	"""
+	if not (event.get("is_event") and event.get("is_owned_by_us") and event.get("event_date")):
+		return 0
+
+	return cint(getdate(event["event_date"]) >= getdate())
+
+
+def registration_blocker(event) -> str | None:
+	"""Why `event` refuses signups, or None when it accepts them.
+
+	Takes the same event payload as `can_register()` (see `event_data()`) and is
+	the single source of truth for the registration rules, so the desk hint and
+	the server-side check can never drift apart. Each failure mode has its own
+	message, so the frontend can show something meaningful.
+	"""
+	if not (event.get("is_event") and event.get("is_owned_by_us")):
+		return _("This isn't an event we're hosting")
+
+	if not event.get("event_date"):
+		return _("This event has no date set")
+
+	if getdate(event["event_date"]) < getdate():
+		return _("Registration for this event has closed")
+
+	return None
 
 
 def get_author(blogger):
